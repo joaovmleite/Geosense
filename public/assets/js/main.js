@@ -21,7 +21,7 @@ const updateUI = (tempC) => {
 
 const loadWeather = async (cityName = 'Oakland') => {
   try {
-    const res = await fetch(`/api/weather?city=${normalizeCity(cityName)}`);
+    const res = await fetch(`/.netlify/functions/weather?city=${normalizeCity(cityName)}`);
     if (!res.ok) return; // Silent fail
     const data = await res.json();
     const temp = data?.main?.temp;
@@ -114,7 +114,7 @@ const escapeAttr = (str) => String(str).replace(/["']/g, '');
 
 const loadNews = async () => {
   try {
-    const res = await fetch('/api/news');
+    const res = await fetch('/.netlify/functions/news');
     if (!res.ok) return; // Silent fail
     const data = await res.json();
     if (Array.isArray(data?.articles)) renderNews(data.articles);
