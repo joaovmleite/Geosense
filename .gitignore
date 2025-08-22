@@ -1,0 +1,7 @@
+# Important files and folders that should not be uploaded
+docs/
+.env
+.local.env
+node_modules/
+
+index.js
