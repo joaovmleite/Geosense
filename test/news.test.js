@@ -176,4 +176,75 @@ describe("netlify/functions/news.js", () => {
     // Should return both articles since exclude parsing failed and is ignored
     expect(titles).toEqual(["Alpha", "Beta"]);
   });
+
+  test("CSV exclude fallback filters out provided titles", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+
+    const articles = [
+      { source: { name: "A" }, title: "Keep Me", description: "desc ok", url: "u1", urlToImage: "img1", publishedAt: "d1", content: "content ok 1234567890" },
+      { source: { name: "B" }, title: "T2", description: "long enough", url: "u2", urlToImage: "img2", publishedAt: "d2", content: "content ok 0987654321" },
+      { source: { name: "C" }, title: "t3", description: "another long enough", url: "u3", urlToImage: "img3", publishedAt: "d3", content: "content ok 1122334455" }
+    ];
+
+    axios.get.mockResolvedValueOnce({ data: { articles } });
+
+    const event = {
+      queryStringParameters: {
+        exclude: "T2, t3",
+      },
+    };
+
+    const res = await handler(event);
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    const titles = body.articles.map((a) => a.title);
+    expect(titles).toEqual(["Keep Me"]);
+  });
+
+  test("forwards pagination params (page and pageSize) to NewsAPI", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+
+    axios.get.mockResolvedValueOnce({ data: { articles: [] } });
+
+    const event = {
+      queryStringParameters: {
+        page: "2",
+        pageSize: "50",
+      },
+    };
+
+    await handler(event);
+
+    expect(axios.get).toHaveBeenCalledWith(
+      "https://newsapi.org/v2/top-headlines",
+      expect.objectContaining({
+        params: expect.objectContaining({ country: "us", page: 2, pageSize: 50, apiKey: "test-news-key" }),
+        timeout: 10000,
+      })
+    );
+  });
+
+  test("limits to 4 articles after filtering and cleaning", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+
+    const mk = (i) => ({
+      source: { name: `S${i}` },
+      title: `Title ${i}`,
+      description: "desc long enough",
+      url: `u${i}`,
+      urlToImage: `img${i}`,
+      publishedAt: `d${i}`,
+      content: "content ok 1234567890",
+    });
+
+    const articles = [mk(1), mk(2), mk(3), mk(4), mk(5), mk(6)];
+    axios.get.mockResolvedValueOnce({ data: { articles } });
+
+    const res = await handler({ queryStringParameters: {} });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.articles).toHaveLength(4);
+    expect(body.articles.map((a) => a.title)).toEqual(["Title 1", "Title 2", "Title 3", "Title 4"]);
+  });
 });

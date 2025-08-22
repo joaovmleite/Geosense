@@ -32,9 +32,13 @@ exports.handler = async (event) => {
       };
     }
 
+    // Optional pagination passthrough (NewsAPI supports `page`)
+    const page = Number.parseInt(qs.page, 10) > 0 ? Number.parseInt(qs.page, 10) : 1;
+    const pageSize = Number.parseInt(qs.pageSize, 10) > 0 ? Number.parseInt(qs.pageSize, 10) : 30;
+
     // Request a larger set, client will filter to ensure 4 with content
     const { data } = await axios.get('https://newsapi.org/v2/top-headlines', {
-      params: { country: 'us', pageSize: 30, apiKey },
+      params: { country: 'us', pageSize, page, apiKey },
       timeout: 10000,
     });
 

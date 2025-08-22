@@ -114,6 +114,8 @@ const escapeAttr = (str) => String(str).replace(/["']/g, '');
 
 // ===== News cache helpers =====
 const NEWS_TITLES_KEY = 'gs.news.titles';
+const NEWS_HISTORY_KEY = 'gs.news.history'; // Array<Batch>, Batch = Array<Article>
+const NEWS_HISTORY_INDEX_KEY = 'gs.news.history.idx'; // current index in history
 const getCachedTitles = () => {
   try {
     const raw = localStorage.getItem(NEWS_TITLES_KEY);
@@ -132,13 +134,47 @@ const setCachedTitles = (titles = []) => {
 
 const normTitle = (t) => String(t || '').trim().toLowerCase();
 
-const fetchNewsRaw = async (excludeTitles = []) => {
+const getHistory = () => {
+  try {
+    const raw = localStorage.getItem(NEWS_HISTORY_KEY);
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+};
+
+const setHistory = (history = []) => {
+  try {
+    localStorage.setItem(NEWS_HISTORY_KEY, JSON.stringify(history));
+  } catch {}
+};
+
+const getHistoryIndex = () => {
+  try {
+    const v = parseInt(localStorage.getItem(NEWS_HISTORY_INDEX_KEY) || '0', 10);
+    return Number.isFinite(v) && v >= 0 ? v : 0;
+  } catch {
+    return 0;
+  }
+};
+
+const setHistoryIndex = (idx = 0) => {
+  try {
+    localStorage.setItem(NEWS_HISTORY_INDEX_KEY, String(idx));
+  } catch {}
+};
+
+const fetchNewsRaw = async (excludeTitles = [], page = 1) => {
   try {
     const params = new URLSearchParams();
     if (Array.isArray(excludeTitles) && excludeTitles.length) {
       try {
         params.set('exclude', JSON.stringify(excludeTitles));
       } catch {}
+    }
+    if (Number.isFinite(page) && page > 1) {
+      params.set('page', String(page));
     }
     const qs = params.toString();
     const res = await fetch(`/.netlify/functions/news${qs ? `?${qs}` : ''}`);
@@ -153,13 +189,52 @@ const fetchNewsRaw = async (excludeTitles = []) => {
 const renderAndCache = (articles) => {
   renderNews(articles);
   const titles = (articles || []).map((a) => a?.title).filter(Boolean);
-  if (titles.length) setCachedTitles(titles);
+  if (titles.length) {
+    const existing = getCachedTitles();
+    const merged = Array.from(new Set([...existing, ...titles]));
+    setCachedTitles(merged);
+  }
+};
+
+const appendToHistory = (batch = []) => {
+  const history = getHistory();
+  history.push(batch);
+  setHistory(history);
+  setHistoryIndex(history.length - 1);
+};
+
+const showHistoryAt = (idx, direction = 1) => {
+  const history = getHistory();
+  const clamped = Math.max(0, Math.min(idx, history.length - 1));
+  const batch = history[clamped] || [];
+
+  // Animate out current items, then render
+  const container = document.querySelector('.geosense-main-component');
+  const items = container?.querySelectorAll?.('.geosense-article');
+  const proceed = () => {
+    renderAndCache(batch);
+    setHistoryIndex(clamped);
+  };
+  if (items && items.length) {
+    window.GeoAnimations?.animateNewsOut?.(items, direction, proceed);
+  } else {
+    proceed();
+  }
 };
 
 const loadNews = async () => {
-  const articles = await fetchNewsRaw();
+  // If we have history from a previous session, show current index
+  const history = getHistory();
+  if (history.length) {
+    showHistoryAt(getHistoryIndex(), 1);
+    return;
+  }
+
+  // Otherwise fetch initial batch, render, and seed history
+  const articles = await fetchNewsRaw([]);
   if (!articles.length) return;
-  renderAndCache(articles);
+  appendToHistory(articles);
+  showHistoryAt(getHistoryIndex(), 1);
 };
 
 // ===== GSAP Animations =====
@@ -239,33 +314,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target?.dataset?.close || target === modal) closeModal();
   });
 
-  // ===== Keyboard Shortcuts: Ctrl + Arrow to refresh news =====
+  // ===== Keyboard Shortcuts: Ctrl + Arrow to navigate/fetch news =====
   let isReloadingNews = false;
   const refreshNews = async (direction = 1) => {
     if (isReloadingNews) return;
     isReloadingNews = true;
 
-    // Ask server for new items excluding what's already shown
-    const exclude = getCachedTitles();
-    const fresh = await fetchNewsRaw(exclude);
+    const history = getHistory();
+    const idx = getHistoryIndex();
 
-    if (!fresh.length) { // Nothing new; keep current items visible
+    if (direction < 0) {
+      // Go to previous batch if available
+      if (idx > 0) showHistoryAt(idx - 1, -1);
       isReloadingNews = false;
       return;
     }
 
-    // Animate current items out, then render filtered and cache
-    const container = document.querySelector('.geosense-main-component');
-    const items = container?.querySelectorAll?.('.geosense-article');
-    const proceed = () => {
-      renderAndCache(fresh);
+    // Going forward: if next batch exists, show it
+    if (idx < history.length - 1) {
+      showHistoryAt(idx + 1, 1);
       isReloadingNews = false;
-    };
-    if (items && items.length) {
-      window.GeoAnimations?.animateNewsOut?.(items, direction, proceed);
-    } else {
-      proceed();
+      return;
     }
+
+    // Otherwise fetch new batch(s), excluding everything we've already seen
+    const seen = getCachedTitles();
+    let fresh = [];
+    for (let page = 1; page <= 3 && fresh.length === 0; page += 1) {
+      const resp = await fetchNewsRaw(seen, page);
+      const seenSet = new Set(seen.map(normTitle));
+      fresh = (resp || []).filter((a) => a?.title && !seenSet.has(normTitle(a.title)));
+    }
+
+    if (!fresh.length) {
+      isReloadingNews = false;
+      return;
+    }
+
+    appendToHistory(fresh);
+    showHistoryAt(getHistoryIndex(), 1);
+    isReloadingNews = false;
   };
 
   document.addEventListener('keydown', (e) => {
