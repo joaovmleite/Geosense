@@ -1,0 +1,132 @@
+const axios = require("axios");
+
+jest.mock("axios");
+
+describe("netlify/functions/news.js", () => {
+  const { handler } = require("../netlify/functions/news");
+  const ORIGINAL_ENV = process.env;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  afterAll(() => {
+    process.env = ORIGINAL_ENV;
+  });
+
+  test("returns 500 when NEWSAPI_ACCESS_KEY is missing", async () => {
+    delete process.env.NEWSAPI_ACCESS_KEY;
+
+    const res = await handler();
+
+    expect(res.statusCode).toBe(500);
+    expect(res.headers["Content-Type"]).toBe("application/json");
+    const body = JSON.parse(res.body);
+    expect(body.error).toMatch(/missing news api key/i);
+  });
+
+  test("successful fetch returns 200 with up to 4 cleaned, informative articles", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+
+    const articles = [
+      {
+        source: { name: "A" },
+        title: "T1",
+        description: "desc",
+        url: "u1",
+        urlToImage: "img1",
+        publishedAt: "d1",
+        content: "hello world [+100 chars]",
+      },
+      {
+        source: { name: "B" },
+        title: "T2",
+        description: "",
+        url: "u2",
+        urlToImage: "img2",
+        publishedAt: "d2",
+        content: "short",
+      }, // too short, filtered out
+      {
+        source: { name: "C" },
+        title: "T3",
+        description: "long enough description here",
+        url: "u3",
+        urlToImage: "img3",
+        publishedAt: "d3",
+        content: "",
+      },
+      {
+        source: { name: "D" },
+        title: "T4",
+        description: "desc4",
+        url: "u4",
+        urlToImage: "img4",
+        publishedAt: "d4",
+        content: "content ok 1234567890",
+      },
+      {
+        source: { name: "E" },
+        title: "T5",
+        description: "desc5 long enough",
+        url: "u5",
+        urlToImage: "img5",
+        publishedAt: "d5",
+        content: "content ok 0987654321",
+      },
+    ];
+
+    axios.get.mockResolvedValueOnce({ data: { articles } });
+
+    const res = await handler();
+
+    expect(axios.get).toHaveBeenCalledWith(
+      "https://newsapi.org/v2/top-headlines",
+      expect.objectContaining({
+        params: expect.objectContaining({
+          country: "us",
+          pageSize: 30,
+          apiKey: "test-news-key",
+        }),
+        timeout: 10000,
+      })
+    );
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(Array.isArray(body.articles)).toBe(true);
+    expect(body.articles).toHaveLength(3); // only 3 pass the heuristic given our mock data
+
+    // Check content was cleaned (removed trailing [+N chars])
+    expect(body.articles[0].content.endsWith("chars]")).toBe(false);
+
+    // Check structure preservation and defaults
+    for (const a of body.articles) {
+      expect(a).toHaveProperty("source");
+      expect(a).toHaveProperty("author");
+      expect(a).toHaveProperty("title");
+      expect(a).toHaveProperty("description");
+      expect(a).toHaveProperty("url");
+      expect(a).toHaveProperty("urlToImage");
+      expect(a).toHaveProperty("publishedAt");
+      expect(a).toHaveProperty("content");
+    }
+  });
+
+  test("propagates API error status and includes details", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+    const err = Object.assign(new Error("Bad Request"), {
+      response: { status: 400, data: { code: "parametersMissing" } },
+    });
+    axios.get.mockRejectedValueOnce(err);
+
+    const res = await handler();
+
+    expect(res.statusCode).toBe(400);
+    expect(res.headers["Content-Type"]).toBe("application/json");
+    const body = JSON.parse(res.body);
+    expect(body.error).toMatch(/failed to fetch news/i);
+    expect(body.details).toEqual({ code: "parametersMissing" });
+  });
+});
