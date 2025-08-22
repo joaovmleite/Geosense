@@ -9,7 +9,13 @@ exports.handler = async (event) => {
       try {
         const parsed = JSON.parse(qs.exclude);
         if (Array.isArray(parsed)) excludeTitles = parsed;
-      } catch {}
+      } catch {
+        // Fallback: support comma-separated list
+        excludeTitles = String(qs.exclude)
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
     }
     const excludeSet = new Set(
       excludeTitles
@@ -55,7 +61,9 @@ exports.handler = async (event) => {
         return text.length >= 20; // heuristic: ensure non-empty, informative text
       })
       // Exclude titles already seen (case-insensitive)
-      .filter((a) => a.title && !excludeSet.has(String(a.title).trim().toLowerCase()));
+      .filter((a) => a.title && !excludeSet.has(String(a.title).trim().toLowerCase()))
+      // Return up to 4 items to match frontend render expectations
+      .slice(0, 4);
 
     return {
       statusCode: 200,
