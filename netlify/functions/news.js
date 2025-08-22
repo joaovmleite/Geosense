@@ -1,17 +1,32 @@
 const axios = require('axios');
 
-exports.handler = async () => {
+exports.handler = async (event) => {
   try {
+    // Parse optional exclude list (array of titles)
+    let excludeTitles = [];
+    const qs = event?.queryStringParameters || {};
+    if (qs.exclude) {
+      try {
+        const parsed = JSON.parse(qs.exclude);
+        if (Array.isArray(parsed)) excludeTitles = parsed;
+      } catch {}
+    }
+    const excludeSet = new Set(
+      excludeTitles
+        .map((t) => String(t || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
     const apiKey = process.env.NEWSAPI_ACCESS_KEY;
     if (!apiKey) {
       return {
         statusCode: 500,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'Missing News API keyin environment.' }),
+        body: JSON.stringify({ error: 'Missing News API key in environment.' }),
       };
     }
 
-    // Request a larger set, we will filter to ensure 4 with content
+    // Request a larger set, client will filter to ensure 4 with content
     const { data } = await axios.get('https://newsapi.org/v2/top-headlines', {
       params: { country: 'us', pageSize: 30, apiKey },
       timeout: 10000,
@@ -39,7 +54,8 @@ exports.handler = async () => {
         const text = (a.content || a.description || '').trim();
         return text.length >= 20; // heuristic: ensure non-empty, informative text
       })
-      .slice(0, 4);
+      // Exclude titles already seen (case-insensitive)
+      .filter((a) => a.title && !excludeSet.has(String(a.title).trim().toLowerCase()));
 
     return {
       statusCode: 200,

@@ -129,4 +129,51 @@ describe("netlify/functions/news.js", () => {
     expect(body.error).toMatch(/failed to fetch news/i);
     expect(body.details).toEqual({ code: "parametersMissing" });
   });
+
+  test("exclude query filters out provided titles (case-insensitive)", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+
+    const articles = [
+      { source: { name: "A" }, title: "Keep Me", description: "desc ok", url: "u1", urlToImage: "img1", publishedAt: "d1", content: "content ok 1234567890" },
+      { source: { name: "B" }, title: "T2", description: "long enough", url: "u2", urlToImage: "img2", publishedAt: "d2", content: "content ok 0987654321" },
+      { source: { name: "C" }, title: "t2", description: "another long enough", url: "u3", urlToImage: "img3", publishedAt: "d3", content: "content ok 1122334455" },
+      { source: { name: "D" }, title: "T3", description: "desc ok", url: "u4", urlToImage: "img4", publishedAt: "d4", content: "content ok abcdefghij" }
+    ];
+
+    axios.get.mockResolvedValueOnce({ data: { articles } });
+
+    const event = {
+      queryStringParameters: {
+        exclude: JSON.stringify(["T2", "t3"]),
+      },
+    };
+
+    const res = await handler(event);
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    const titles = body.articles.map((a) => a.title);
+    expect(titles).toEqual(["Keep Me"]);
+  });
+
+  test("invalid exclude JSON is ignored gracefully", async () => {
+    process.env.NEWSAPI_ACCESS_KEY = "test-news-key";
+
+    const articles = [
+      { source: { name: "A" }, title: "Alpha", description: "desc ok", url: "u1", urlToImage: "img1", publishedAt: "d1", content: "content ok 1234567890" },
+      { source: { name: "B" }, title: "Beta", description: "long enough", url: "u2", urlToImage: "img2", publishedAt: "d2", content: "content ok 0987654321" }
+    ];
+
+    axios.get.mockResolvedValueOnce({ data: { articles } });
+
+    const event = { queryStringParameters: { exclude: "not-json" } };
+
+    const res = await handler(event);
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    const titles = body.articles.map((a) => a.title);
+    // Should return both articles since exclude parsing failed and is ignored
+    expect(titles).toEqual(["Alpha", "Beta"]);
+  });
 });

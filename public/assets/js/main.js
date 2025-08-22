@@ -112,14 +112,54 @@ const escapeHtml = (str) =>
 
 const escapeAttr = (str) => String(str).replace(/["']/g, '');
 
-const loadNews = async () => {
+// ===== News cache helpers =====
+const NEWS_TITLES_KEY = 'gs.news.titles';
+const getCachedTitles = () => {
   try {
-    const res = await fetch('/.netlify/functions/news');
-    if (!res.ok) return; // Silent fail
-    const data = await res.json();
-    if (Array.isArray(data?.articles)) renderNews(data.articles);
-  } catch (_) {
+    const raw = localStorage.getItem(NEWS_TITLES_KEY);
+    const arr = JSON.parse(raw || '[]');
+    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+  } catch {
+    return [];
   }
+};
+
+const setCachedTitles = (titles = []) => {
+  try {
+    localStorage.setItem(NEWS_TITLES_KEY, JSON.stringify(titles.filter(Boolean)));
+  } catch {}
+};
+
+const normTitle = (t) => String(t || '').trim().toLowerCase();
+
+const fetchNewsRaw = async (excludeTitles = []) => {
+  try {
+    const params = new URLSearchParams();
+    if (Array.isArray(excludeTitles) && excludeTitles.length) {
+      try {
+        params.set('exclude', JSON.stringify(excludeTitles));
+      } catch {}
+    }
+    const qs = params.toString();
+    const res = await fetch(`/.netlify/functions/news${qs ? `?${qs}` : ''}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.articles) ? data.articles : [];
+  } catch {
+    return [];
+  }
+};
+
+const renderAndCache = (articles) => {
+  renderNews(articles);
+  const titles = (articles || []).map((a) => a?.title).filter(Boolean);
+  if (titles.length) setCachedTitles(titles);
+};
+
+const loadNews = async () => {
+  const articles = await fetchNewsRaw();
+  if (!articles.length) return;
+  renderAndCache(articles);
 };
 
 // ===== GSAP Animations =====
@@ -133,6 +173,37 @@ document.addEventListener('DOMContentLoaded', () => {
   select?.addEventListener('change', ({ target: { value } }) => loadWeather(value));
   window.GeoAnimations?.animateInitial?.();
   loadNews();
+
+  // ===== Tutorial Modal =====
+  const tutorial = document.getElementById('tutorial-modal');
+  const tClose = tutorial?.querySelector('[data-close]');
+  let lastFocusTut = null;
+
+  const closeTutorial = () => {
+    if (!tutorial) return;
+    tutorial.classList.remove('is-open');
+    tutorial.setAttribute('aria-hidden', 'true');
+    lastFocusTut?.focus?.();
+    document.removeEventListener('keydown', onTutKeydown);
+  };
+
+  const onTutKeydown = (e) => {
+    if (e.key === 'Escape') closeTutorial();
+  };
+
+  if (tutorial) {
+    lastFocusTut = document.activeElement;
+    window.GeoAnimations?.openModalWithGsap?.(tutorial);
+    (tClose || tutorial)?.focus?.();
+    document.addEventListener('keydown', onTutKeydown);
+  }
+
+  tutorial?.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target?.dataset?.close || target === tutorial) {
+      closeTutorial();
+    }
+  });
 
   // ===== Terms Modal Wiring =====
   const trigger = document.getElementById('terms-of-usage');
@@ -166,5 +237,45 @@ document.addEventListener('DOMContentLoaded', () => {
   modal?.addEventListener('click', (e) => {
     const target = e.target;
     if (target?.dataset?.close || target === modal) closeModal();
+  });
+
+  // ===== Keyboard Shortcuts: Ctrl + Arrow to refresh news =====
+  let isReloadingNews = false;
+  const refreshNews = async (direction = 1) => {
+    if (isReloadingNews) return;
+    isReloadingNews = true;
+
+    // Ask server for new items excluding what's already shown
+    const exclude = getCachedTitles();
+    const fresh = await fetchNewsRaw(exclude);
+
+    if (!fresh.length) { // Nothing new; keep current items visible
+      isReloadingNews = false;
+      return;
+    }
+
+    // Animate current items out, then render filtered and cache
+    const container = document.querySelector('.geosense-main-component');
+    const items = container?.querySelectorAll?.('.geosense-article');
+    const proceed = () => {
+      renderAndCache(fresh);
+      isReloadingNews = false;
+    };
+    if (items && items.length) {
+      window.GeoAnimations?.animateNewsOut?.(items, direction, proceed);
+    } else {
+      proceed();
+    }
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (!e.ctrlKey) return;
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      refreshNews(1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      refreshNews(-1);
+    }
   });
 });
