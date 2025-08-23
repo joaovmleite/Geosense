@@ -19,7 +19,11 @@ const updateUI = (tempC) => {
   }
 };
 
-const loadWeather = async (cityName = 'Oakland') => {
+const DEFAULT_CITY = 'Oakland';
+const NEWS_RENDER_LIMIT = 4; // number of articles shown per batch
+const MAX_FETCH_PAGES = 3;   // max pages to try when fetching fresh news
+
+const loadWeather = async (cityName = DEFAULT_CITY) => {
   try {
     const res = await fetch(`/.netlify/functions/weather?city=${normalizeCity(cityName)}`);
     if (!res.ok) return; // Silent fail
@@ -46,7 +50,7 @@ const renderNews = (articles) => {
 
   const list = articles
     .filter((a) => a && (a.title || a.description || a.content))
-    .slice(0, 4);
+    .slice(0, NEWS_RENDER_LIMIT);
 
   const html = list
     .map((a) => {
@@ -77,8 +81,7 @@ const renderNews = (articles) => {
   window.GeoAnimations?.animateNewsItems?.(items);
   window.GeoAnimations?.attachHoverAffordances?.(items);
 
-  // Event delegation for click/keyboard activation
-  if (!container.dataset.eventsBound) {
+  if (!container.dataset.eventsBound) { // Event delegation for click/keyboard activation
     const openArticle = (el) => {
       const { url } = el.dataset;
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
@@ -314,7 +317,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (target?.dataset?.close || target === modal) closeModal();
   });
 
-  // ===== Keyboard Shortcuts: Ctrl + Arrow to navigate/fetch news =====
   let isReloadingNews = false;
   const refreshNews = async (direction = 1) => {
     if (isReloadingNews) return;
@@ -340,7 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Otherwise fetch new batch(s), excluding everything we've already seen
     const seen = getCachedTitles();
     let fresh = [];
-    for (let page = 1; page <= 3 && fresh.length === 0; page += 1) {
+    for (let page = 1; page <= MAX_FETCH_PAGES && fresh.length === 0; page += 1) {
       const resp = await fetchNewsRaw(seen, page);
       const seenSet = new Set(seen.map(normTitle));
       fresh = (resp || []).filter((a) => a?.title && !seenSet.has(normTitle(a.title)));
@@ -356,14 +358,5 @@ document.addEventListener('DOMContentLoaded', () => {
     isReloadingNews = false;
   };
 
-  document.addEventListener('keydown', (e) => {
-    if (!e.ctrlKey) return;
-    if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      refreshNews(1);
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      refreshNews(-1);
-    }
-  });
+  window.GeoNews = Object.assign(window.GeoNews || {}, { refreshNews });
 });
