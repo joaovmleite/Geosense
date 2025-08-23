@@ -12,6 +12,22 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&display=swap" rel="stylesheet">
     <!-- GSAP CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <!-- Detection of Devices -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+          const desktop = document.getElementById('quicktip-desktop');
+          const mobile = document.getElementById('quicktip-mobile');
+          if (!desktop || !mobile) return;
+  
+          const hasCoarsePointer = (typeof window.matchMedia === 'function') && window.matchMedia('(pointer: coarse)').matches;
+          const hasTouchPoints = (navigator.maxTouchPoints ?? 0) > 0;
+          const uaIsMobile = /Mobi|Android|iPhone|iPad|iPod|Opera Mini|IEMobile/i.test(navigator.userAgent);
+          const isMobile = Boolean(hasCoarsePointer || hasTouchPoints || uaIsMobile);
+  
+          desktop.hidden = isMobile;
+          mobile.hidden = !isMobile;
+        });
+    </script>
 </head>
 <body>
     <header class="geosense-header-primary">
@@ -115,10 +131,15 @@
             <button class="gs-modal__close" type="button" aria-label="Close" data-close="tutorial-modal">×</button>
             <div class="gs-modal__content">
                 <h1 id="tutorial-title">Quick tip</h1>
-                <p>Navigate between news batches using your keyboard:</p>
-                <p><strong>Ctrl + Right Arrow</strong> → Next articles<br />
-                   <strong>Ctrl + Left Arrow</strong> → Previous/refresh articles</p>
-                <p>You can also click an article to open it in a new tab.</p>
+                <div id="quicktip-desktop">
+                    <p>Navigate between news batches using your keyboard:</p>
+                    <p><strong>Ctrl + Right Arrow</strong> → Next articles<br />
+                       <strong>Ctrl + Left Arrow</strong> → Previous/refresh articles</p>
+                    <p>You can also click an article to open it in a new tab.</p>
+                </div>
+                <div id="quicktip-mobile" style="display: none;">
+                    <p><em>On mobile:</em> touch and hold the screen, then drag left for newer news and right for past news.</p>
+                </div>
             </div>
         </div>
     </div>
