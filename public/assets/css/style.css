@@ -9,6 +9,8 @@ body {
     font-family: var(--ff-primary);
 }
 
+[hidden] { display: none !important; }
+
 /* shared container layout */
 .geosense-header-primary,
 .geosense-main-primary,
@@ -146,17 +148,24 @@ body {
     margin-top: 0.5rem;
 }
 
-.gs-modal__content h1 {
-    font-size: 1.5rem;
+.gs-modal--tutorial .gs-modal__content {
+    text-align: center;
+    align-items: center;
 }
 
-.gs-modal__content h2 {
-    font-size: 1.125rem;
+.gs-modal--tutorial .gs-modal__content h1 {
+    font-size: 1.65rem;
 }
 
-.gs-modal__content ol,
-.gs-modal__content ul {
-    padding-left: 1.25rem;
+#quicktip-desktop,
+#quicktip-mobile {
+    display: grid;
+    gap: 0.5rem;
+}
+
+#quicktip-desktop p,
+#quicktip-mobile p {
+    margin: 0;
 }
 
 .gs-modal__close {
@@ -169,4 +178,76 @@ body {
     line-height: 1;
     cursor: pointer;
     color: #333;
+}
+
+@media (max-width: 480px) {
+  .gs-modal__dialog {
+    width: 96vw;
+    padding: 1rem 1rem 1.25rem;
+  }
+  .gs-modal--tutorial .gs-modal__content {
+    font-size: 1.05rem;
+    line-height: 1.6;
+  }
+  #quicktip-mobile p,
+  #quicktip-desktop p {
+    font-size: 1.05rem;
+  }
+  .gs-modal__close {
+    right: 0.5rem;
+    top: 0.5rem;
+  }
+}
+
+/* Fluid, readable typography on various viewports */
+.geosense-location-select { font-size: clamp(1rem, 2.2vw, 1.25rem); }
+.geosense-locationweather { font-size: clamp(1.25rem, 2.6vw, 1.75rem); }
+.geosense-article-title { font-size: clamp(1.2rem, 2.4vw, 1.9rem); }
+.geosense-article-paragraph { font-size: clamp(0.98rem, 2vw, 1.12rem); }
+.gs-modal--tutorial .gs-modal__content { font-size: clamp(0.98rem, 1.8vw, 1.08rem); }
+
+/* Give containers breathing room on narrow screens */
+@media (max-width: 768px) {
+  .geosense-header-primary,
+  .geosense-main-primary,
+  .geosense-footer-primary {
+    padding-inline: 1rem;
+  }
+}
+
+/* Footer stacks neatly on small screens */
+@media (max-width: 640px) {
+  .geosense-footer-component {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+  }
+}
+
+/* Improve tap targets and spacing for articles on mobile */
+@media (max-width: 600px) {
+  .geosense-article { padding: 14px; }
+  .geosense-article-title { line-height: 1.25; }
+  .geosense-article-paragraph { line-height: 1.55; }
+}
+
+/* Modal sizing refinements for small devices */
+@media (max-width: 768px) {
+  .gs-modal__dialog {
+    width: 94vw;
+    max-height: 85vh;
+    padding: 1rem 1rem 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .gs-modal__dialog {
+    width: 96vw;
+    max-height: 88vh;
+  }
+  /* Slightly larger quick tip text on very small screens for readability */
+  #quicktip-mobile p,
+  #quicktip-desktop p {
+    font-size: clamp(1rem, 2.8vw, 1.08rem);
+  }
 }
